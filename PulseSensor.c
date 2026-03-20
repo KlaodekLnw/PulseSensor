@@ -1,7 +1,3 @@
-// ===============================
-// PULSE SENSOR FINAL STABLE CODE
-// ===============================
-
 const int sensorPin = A0;
 const int pulsePin  = 2;
 
@@ -10,9 +6,14 @@ int currSignal = 0;
 int nextSignal = 0;
 
 unsigned long lastBeatTime = 0;
+unsigned long startTime = 0;
 
-const int refractoryPeriod = 250;   // กัน detect ซ้ำ (ms)
-const int fingerThreshold  = 450;   // ตรวจว่ามีนิ้วหรือไม่
+const int refractoryPeriod = 300;   // กัน detect ซ้ำ
+const int fingerThreshold  = 450;   // ตรวจนิ้ว
+const int minPeakHeight    = 20;    // ⭐ กัน noise (สำคัญ)
+
+int bpmValues[50];
+int bpmIndex = 0;
 
 
 // ---------- Smooth Read ----------
@@ -31,13 +32,13 @@ void setup() {
   pinMode(pulsePin, OUTPUT);
 
   Serial.println("Pulse Sensor Ready...");
+  startTime = millis();
 }
 
 
 // ================= LOOP =================
 void loop() {
 
-  // shift window (สำหรับ peak detection)
   prevSignal = currSignal;
   currSignal = nextSignal;
   nextSignal = readSmooth();
@@ -47,32 +48,61 @@ void loop() {
   // ===== Finger Detection =====
   if (currSignal < fingerThreshold) {
     digitalWrite(pulsePin, LOW);
-    return;   // ไม่มีนิ้ว → ไม่คำนวณ BPM
+    return;
   }
 
   // ===== TRUE PEAK DETECTION =====
   if (currSignal > prevSignal &&
       currSignal > nextSignal &&
-      (currSignal - prevSignal) > 3 &&     // กัน noise เล็ก
+      (currSignal - prevSignal) > minPeakHeight &&
       (now - lastBeatTime > refractoryPeriod)) {
 
       unsigned long interval = now - lastBeatTime;
 
-      // ช่วง BPM ของมนุษย์จริง
-      if (interval > 350 && interval < 1500) {
+      // ⭐ ช่วงหัวใจมนุษย์จริง (ตัด 169 BPM ทิ้ง)
+      if (interval > 450 && interval < 1400) {
 
         int bpm = 60000 / interval;
 
-        Serial.print("BPM: ");
+        Serial.print("Instant BPM: ");
         Serial.println(bpm);
 
-        // digital pulse output
+        // เก็บค่า BPM
+        if (bpmIndex < 50) {
+          bpmValues[bpmIndex++] = bpm;
+        }
+
+        // digital pulse
         digitalWrite(pulsePin, HIGH);
         delay(20);
         digitalWrite(pulsePin, LOW);
       }
 
       lastBeatTime = now;
+  }
+
+  // ===== AVERAGE EVERY 20s =====
+  if (now - startTime >= 20000) {
+
+    long sum = 0;
+
+    for (int i = 0; i < bpmIndex; i++) {
+      sum += bpmValues[i];
+    }
+
+    if (bpmIndex > 0) {
+      float avgBPM = sum / (float)bpmIndex;
+
+      Serial.println("====================");
+      Serial.print("Average BPM (20s): ");
+      Serial.println(avgBPM);
+      Serial.println("====================");
+    } else {
+      Serial.println("No beats detected");
+    }
+
+    bpmIndex = 0;
+    startTime = now;
   }
 
   delay(5);
