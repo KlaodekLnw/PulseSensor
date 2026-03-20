@@ -1,5 +1,6 @@
 const int sensorPin = A0;
 const int pulsePin  = 2;
+const int analogOutPin = 9;
 
 int prevSignal = 0;
 int currSignal = 0;
@@ -8,9 +9,9 @@ int nextSignal = 0;
 unsigned long lastBeatTime = 0;
 unsigned long startTime = 0;
 
-const int refractoryPeriod = 300;   // กัน detect ซ้ำ
-const int fingerThreshold  = 450;   // ตรวจนิ้ว
-const int minPeakHeight    = 20;    // ⭐ กัน noise (สำคัญ)
+const int refractoryPeriod = 300;
+const int fingerThreshold  = 450;
+const int minPeakHeight    = 20;
 
 int bpmValues[50];
 int bpmIndex = 0;
@@ -30,6 +31,7 @@ int readSmooth() {
 void setup() {
   Serial.begin(9600);
   pinMode(pulsePin, OUTPUT);
+  pinMode(analogOutPin, OUTPUT);
 
   Serial.println("Pulse Sensor Ready...");
   startTime = millis();
@@ -45,6 +47,9 @@ void loop() {
 
   unsigned long now = millis();
 
+  // ⭐ ส่งสัญญาณไป Oscilloscope (กราฟจริง)
+  analogWrite(analogOutPin, currSignal / 4);  // 0-1023 → 0-255
+
   // ===== Finger Detection =====
   if (currSignal < fingerThreshold) {
     digitalWrite(pulsePin, LOW);
@@ -59,7 +64,6 @@ void loop() {
 
       unsigned long interval = now - lastBeatTime;
 
-      // ⭐ ช่วงหัวใจมนุษย์จริง (ตัด 169 BPM ทิ้ง)
       if (interval > 450 && interval < 1400) {
 
         int bpm = 60000 / interval;
@@ -67,12 +71,11 @@ void loop() {
         Serial.print("Instant BPM: ");
         Serial.println(bpm);
 
-        // เก็บค่า BPM
         if (bpmIndex < 50) {
           bpmValues[bpmIndex++] = bpm;
         }
 
-        // digital pulse
+        // ⭐ pulse ชัด ๆ สำหรับ oscilloscope
         digitalWrite(pulsePin, HIGH);
         delay(20);
         digitalWrite(pulsePin, LOW);
